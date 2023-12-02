@@ -22,10 +22,10 @@ def _process_video(video):
 
     video_generator = VideoGenerator()
     output_video = video_generator.generate_video(annotated_frames, video)
-    output_video.show()
+    # output_video.show()
 
+if __name__ == '__main__':
+    videos = ["data/tirada_1.mp4", "data/tirada_2.mp4", "data/tirada_3.mp4", "data/tirada_4.mp4"]
 
-videos = ["data/tirada_1.mp4", "data/tirada_2.mp4", "data/tirada_3.mp4", "data/tirada_4.mp4"]
-
-with multiprocessing.Pool() as pool:
-    pool.map(_process_video, videos)
+    with multiprocessing.Pool() as pool:
+        pool.map(_process_video, videos)
