@@ -12,7 +12,6 @@ class VideoProcessor:
             return None
 
         previous_frame = None
-        stopping_threshold = 1  # Ajusta este valor según sea necesario
 
         while cap.isOpened():
             ret, frame = cap.read()
@@ -39,14 +38,28 @@ class VideoProcessor:
             if previous_frame is not None:
                 # Calcular la diferencia entre el fotograma actual y el anterior
                 diff = cv2.absdiff(frame, previous_frame)
-                diff_sum = np.sum(diff)
+
+                # Convertir la diferencia a escala de grises
+                diff_gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+
+                # Aplicar umbralización a la diferencia
+                _, diff_thresholded = cv2.threshold(diff_gray, 30, 255, cv2.THRESH_BINARY)
+
+                # Calcular la suma de los píxeles umbralizados
+                diff_sum = np.sum(diff_thresholded)
                 print(diff_sum)
-                # Si la diferencia es menor que el umbral, mostrar el fotograma y detener el bucle
-                if diff_sum < stopping_threshold:
+
+                # Si la suma es menor que el umbral, mostrar el fotograma y detener el bucle
+                # video 4 suma 510
+                # video 3
+                # video 1 suma 255
+                # video 2 suma 510
+                if diff_sum <= 600 and diff_sum > 100:  # Puedes ajustar este valor según sea necesario
                     print("Dado detenido. Mostrando el fotograma.")
                     cv2.imshow("Fotograma Detenido", frame)
+                    print('suma', diff_sum)
                     cv2.waitKey(0)  # Esperar hasta que se presione una tecla
-                    break
+                    #break
 
             previous_frame = frame.copy()
 
@@ -55,3 +68,5 @@ class VideoProcessor:
 
         cap.release()
         cv2.destroyAllWindows()
+
+
