@@ -12,24 +12,59 @@ class VideoProcessor:
         - video_path (str): Ruta del archivo de video.
         - output_path (str): Ruta del archivo de video de salida. Por defecto es "resultado.mp4".
         """
+        # Rutas de entrada y salida, lista para almacenar dados detectados, y configuración de logging
         self.video_path = video_path
         self.output_path = output_path
         self.dados = []
         self.logger = logging.getLogger(__name__)
 
     def _umbralizar_percentil(self, imagen, percentil=70):
+        """
+        Aplica umbralización a una imagen utilizando un percentil específico.
+
+        Parameters:
+        - imagen (np.array): Imagen de entrada.
+        - percentil (int): Percentil para la umbralización. Por defecto es 70.
+
+        Returns:
+        - np.array: Imagen binaria umbralizada.
+        """
+        # Calcular el umbral según el percentil
         umbral = np.percentile(imagen, percentil)
+        # Aplicar umbralización
         _, imagen_binaria = cv2.threshold(imagen, umbral, 255, cv2.THRESH_BINARY)
         return imagen_binaria
 
     def _clausura(self, imagen_binaria, radio_kernel=4):
+        """
+        Aplica operación de clausura a una imagen binaria.
+
+        Parameters:
+        - imagen_binaria (np.array): Imagen binaria de entrada.
+        - radio_kernel (int): Radio del kernel para la operación de clausura. Por defecto es 4.
+
+        Returns:
+        - np.array: Imagen resultante después de la clausura.
+        """
+        # Crear un kernel elíptico para la clausura
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radio_kernel, 2 * radio_kernel))
+        # Aplicar operación de clausura
         resultado_clausura = cv2.morphologyEx(imagen_binaria, cv2.MORPH_CLOSE, kernel)
         return resultado_clausura
 
     def _eliminar_objetos_borde(self, imagen_binaria):
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(imagen_binaria)
+        """
+        Elimina objetos conectados al borde de la imagen binaria.
 
+        Parameters:
+        - imagen_binaria (np.array): Imagen binaria de entrada.
+
+        Returns:
+        - np.array: Imagen resultante sin objetos conectados al borde.
+        """
+        # Encontrar componentes conectados en la imagen binaria
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(imagen_binaria)
+        # Destacar objetos conectados al borde
         borde_highlight = np.zeros_like(imagen_binaria)
 
         for i in range(1, num_labels):
@@ -39,21 +74,43 @@ class VideoProcessor:
                     stats[i, cv2.CC_STAT_WIDTH] + stats[i, cv2.CC_STAT_LEFT] == imagen_binaria.shape[1]):
                 borde_highlight[labels == i] = 255
 
+        # Crear una copia de la imagen binaria sin objetos conectados al borde
         imagen_sin_borde = imagen_binaria.copy()
         imagen_sin_borde[borde_highlight == 255] = 0
 
         return imagen_sin_borde
 
     def _diferencia(self, imagen1, imagen2):
+        """
+        Calcula la diferencia entre dos imágenes.
+
+        Parameters:
+        - imagen1 (np.array): Primera imagen.
+        - imagen2 (np.array): Segunda imagen.
+
+        Returns:
+        - np.array: Zonas resaltadas que representan la diferencia entre las dos imágenes.
+        """
+        # Calcular la diferencia entre las imágenes
         diferencia = imagen2.astype(int) - imagen1.astype(int)
         diferencia_abs = np.abs(diferencia).astype(np.uint8)
-
+        # Aplicar umbralización inversa para obtener zonas resaltadas
         _, diferencia_binaria = cv2.threshold(diferencia_abs, 10, 255, cv2.THRESH_BINARY_INV)
         zonas_resaltadas = cv2.bitwise_and(imagen2, imagen2, mask=diferencia_binaria)
 
         return zonas_resaltadas
 
     def _seleccion_contornos(self, imagen):
+        """
+        Selecciona contornos en una imagen binaria.
+
+        Parameters:
+        - imagen (np.array): Imagen binaria de entrada.
+
+        Returns:
+        - List[np.array]: Lista de contornos seleccionados.
+        """
+        # Encontrar contornos en la imagen binaria
         contornos, _ = cv2.findContours(imagen, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         contornos_seleccionados = [
@@ -65,6 +122,17 @@ class VideoProcessor:
         return contornos_seleccionados
 
     def _subimagen(self, imagen, contorno):
+        """
+        Extrae una subimagen del área del contorno en la imagen.
+
+        Parameters:
+        - imagen (np.array): Imagen de entrada.
+        - contorno (np.array): Contorno del área a extraer.
+
+        Returns:
+        - np.array: Subimagen extraída.
+        """
+        # Crear una máscara para el contorno
         mascara_contorno = np.zeros_like(imagen)
         cv2.drawContours(mascara_contorno, [contorno], -1, 255, thickness=cv2.FILLED)
 
@@ -77,6 +145,16 @@ class VideoProcessor:
         return subimagen_contorno_reducida
 
     def _contar_puntos(self, contorno, imagen):
+        """
+        Cuenta los puntos en el área del contorno en la imagen.
+
+        Parameters:
+        - contorno (np.array): Contorno del área a contar.
+        - imagen (np.array): Imagen de entrada.
+
+        Returns:
+        - Tuple[np.array, int]: Contorno y número de puntos detectados en el área.
+        """
         subimagen_azul_reducida = self._subimagen(imagen, contorno)
         subimagen_bin = self._umbralizar_percentil(subimagen_azul_reducida, 95)
         contornos_subimagen_bin, _ = cv2.findContours(subimagen_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -90,6 +168,12 @@ class VideoProcessor:
         return contorno, len(contornos_filtrados_subimagen_bin)
 
     def _cambio_dado(self, imagen):
+        """
+        Actualiza la lista de dados eliminando aquellos que no han cambiado.
+
+        Parameters:
+        - imagen (np.array): Imagen actual.
+        """
         nuevos_dados = []
 
         for contorno, puntos_anteriores in self.dados:
@@ -101,6 +185,17 @@ class VideoProcessor:
         self.dados = nuevos_dados
 
     def _contorno_similar(self, contorno1, contorno2, distancia_umbral=30):
+        """
+        Compara la similitud entre dos contornos basándose en la distancia entre sus centroides.
+
+        Parameters:
+        - contorno1 (np.array): Primer contorno.
+        - contorno2 (np.array): Segundo contorno.
+        - distancia_umbral (int): Umbral de distancia para considerar los contornos similares. Por defecto es 30.
+
+        Returns:
+        - bool: True si los contornos son similares, False de lo contrario.
+        """
         M1 = cv2.moments(contorno1)
         M2 = cv2.moments(contorno2)
 
@@ -115,6 +210,16 @@ class VideoProcessor:
         return distancia_centroides < distancia_umbral
 
     def _dibujar(self, imagen, color):
+        """
+        Dibuja contornos y valores sobre la imagen.
+
+        Parameters:
+        - imagen (np.array): Imagen de entrada.
+        - color (Tuple[int, int, int]): Color para los contornos y valores.
+
+        Returns:
+        - np.array: Imagen con contornos y valores dibujados.
+        """
         imagen_dibujada = imagen.copy()
 
         for contorno, valor in self.dados:
@@ -130,6 +235,9 @@ class VideoProcessor:
         return imagen_dibujada
 
     def _procesar_video(self):
+        """
+        Procesa el video fotograma por fotograma y guarda el resultado en un nuevo archivo de video.
+        """
         cap = cv2.VideoCapture(self.video_path)
 
         if not cap.isOpened():

@@ -3,19 +3,21 @@
 ### Grupo 6
 
 ### Integrantes:
+
 - Sanchez, Salvador
 
 - Ponce, Daniel
 
 - Yañez, Mirian
 
-# requemientos 
+# Requerimientos 
 ```python
     python -m pip install requirements.txt
 ```
-# Ejecucion
+
+# Ejecución
 ```python
     python main.py
 ```
 
-### la salida de video procesado estan en la carpra output
+### la salida de video procesado estan en la carpeta output
