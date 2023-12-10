@@ -81,20 +81,9 @@ class VideoProcessor:
         return imagen_sin_borde
 
     def _diferencia(self, imagen1, imagen2):
-        """
-        Calcula la diferencia entre dos imágenes.
-
-        Parameters:
-        - imagen1 (np.array): Primera imagen.
-        - imagen2 (np.array): Segunda imagen.
-
-        Returns:
-        - np.array: Zonas resaltadas que representan la diferencia entre las dos imágenes.
-        """
-        # Calcular la diferencia entre las imágenes
         diferencia = imagen2.astype(int) - imagen1.astype(int)
         diferencia_abs = np.abs(diferencia).astype(np.uint8)
-        # Aplicar umbralización inversa para obtener zonas resaltadas
+
         _, diferencia_binaria = cv2.threshold(diferencia_abs, 10, 255, cv2.THRESH_BINARY_INV)
         zonas_resaltadas = cv2.bitwise_and(imagen2, imagen2, mask=diferencia_binaria)
 
@@ -253,15 +242,18 @@ class VideoProcessor:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         video_salida = cv2.VideoWriter(self.output_path, fourcc, 20, (width, height))
 
-        for n in range(1, int(cap.get(cv2.CAP_PROP_FRAME_COUNT))):
+        anterior = None
+
+        for n in range(0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT))):
             try:
-                framer = frame[:, :, 2]
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                azul = frame[:, :, 0]
+                rojo = frame[:, :, 2]
 
-                azul = frame[:, :, 2]
-                rojo = frame[:, :, 0]
+                if n == 0:
+                    anterior = rojo
+                    continue
 
-                zonas_resaltadas = self._diferencia(framer, rojo)
+                zonas_resaltadas = self._diferencia(anterior, rojo)
 
                 rojo_binario = self._umbralizar_percentil(zonas_resaltadas)
 
@@ -282,11 +274,14 @@ class VideoProcessor:
 
                     if nuevo:
                         valor = self._contar_puntos(contorno, azul)
-                        self.dados.append(valor)
+                        if valor[1] != 0:
+                            self.dados.append(valor)
 
-                imagen_final = self._dibujar(frame, (0, 0, 0))
+                imagen_final = self._dibujar(frame, (255, 0, 0))
 
-                video_salida.write(cv2.cvtColor(imagen_final, cv2.COLOR_RGB2BGR))
+                video_salida.write(imagen_final)
+
+                anterior = rojo
 
                 ret, frame = cap.read()
 
