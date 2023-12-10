@@ -20,4 +20,4 @@
     python main.py
 ```
 
-### la salida de video procesado estan en la carpeta output
+### Las salidas de videos procesados están en la carpeta output
