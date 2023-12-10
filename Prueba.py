@@ -78,19 +78,91 @@ def eliminar_objetos_borde(imagen_binaria):
     return imagen_sin_borde
 
 def diferencia(imagen1, imagen2):
-    # Resta los pixeles entre dos imágenes en escala de grises
     diferencia = imagen2.astype(int) - imagen1.astype(int)
-
-    # Calcula el valor absoluto de la diferencia
     diferencia_abs = np.abs(diferencia).astype(np.uint8)
 
-    # Umbraliza la diferencia
     _, diferencia_binaria = cv2.threshold(diferencia_abs, 10, 255, cv2.THRESH_BINARY_INV)
-
-    # Aplica la máscara para resaltar las zonas de diferencia
     zonas_resaltadas = cv2.bitwise_and(imagen2, imagen2, mask=diferencia_binaria)
 
     return zonas_resaltadas
+
+def seleccion_contornos(imagen):
+    contornos, _ = cv2.findContours(imagen, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    contornos_seleccionados = [
+        contorno for contorno in contornos
+        if 3000 < cv2.contourArea(contorno) < 8000
+        and 0.6 < (4 * np.pi * cv2.contourArea(contorno) / (cv2.arcLength(contorno, True) ** 2))
+    ]
+
+    return contornos_seleccionados
+
+def subimagen(imagen, contorno):
+    mascara_contorno = np.zeros_like(imagen)
+    cv2.drawContours(mascara_contorno, [contorno], -1, 255, thickness=cv2.FILLED)
+
+    subimagen_contorno = np.zeros_like(imagen)
+    subimagen_contorno[mascara_contorno == 255] = imagen[mascara_contorno == 255]
+
+    x, y, w, h = cv2.boundingRect(contorno)
+    subimagen_contorno_reducida = subimagen_contorno[y:y+h, x:x+w]
+
+    return subimagen_contorno_reducida
+
+def contar_puntos(contorno, imagen):
+    subimagen_azul_reducida = subimagen(imagen, contorno)
+    
+    subimagen_bin = umbralizar_percentil(subimagen_azul_reducida, 95)
+    
+    contornos_subimagen_bin, _ = cv2.findContours(subimagen_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    contornos_filtrados_subimagen_bin = [
+        contorno_subimagen for contorno_subimagen in contornos_subimagen_bin
+        if cv2.arcLength(contorno_subimagen, True) != 0 
+        and 0.8 < (4 * np.pi * cv2.contourArea(contorno_subimagen) / (cv2.arcLength(contorno_subimagen, True) ** 2))
+        and cv2.contourArea(contorno_subimagen) > 50
+    ]
+    
+    return contorno, len(contornos_filtrados_subimagen_bin)
+
+def cambio_dado(dados, imagen):
+    nuevos_dados = []
+
+    for contorno, puntos_anteriores in dados:
+        _, puntos_actuales = contar_puntos(contorno, imagen)
+
+        if puntos_anteriores == puntos_actuales:
+            nuevos_dados.append((contorno, puntos_actuales))
+
+    return nuevos_dados
+
+def contorno_similar(contorno1, contorno2, distancia_umbral=30):
+    M1 = cv2.moments(contorno1)
+    M2 = cv2.moments(contorno2)
+
+    cx1 = int(M1['m10'] / M1['m00']) if M1['m00'] != 0 else 0
+    cy1 = int(M1['m01'] / M1['m00']) if M1['m00'] != 0 else 0
+
+    cx2 = int(M2['m10'] / M2['m00']) if M2['m00'] != 0 else 0
+    cy2 = int(M2['m01'] / M2['m00']) if M2['m00'] != 0 else 0
+
+    distancia_centroides = np.sqrt((cx1 - cx2)**2 + (cy1 - cy2)**2)
+
+    return distancia_centroides < distancia_umbral
+
+def dibujar(datos, imagen, color):
+    imagen_dibujada = imagen.copy()
+
+    for contorno, valor in datos:
+        cv2.drawContours(imagen_dibujada, [contorno], -1, color, 5)
+        
+        M = cv2.moments(contorno)
+        cx = int(M['m10'] / M['m00'])
+        cy = int(M['m01'] / M['m00'])
+
+        cv2.putText(imagen_dibujada, str(valor), (cx + 35, cy - 40), cv2.FONT_HERSHEY_SIMPLEX, 2, color, 5, cv2.LINE_AA)
+
+    return imagen_dibujada
 
 
 
@@ -103,6 +175,9 @@ ruta_video_salida = "resultado.mp4"
 
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 video_salida = cv2.VideoWriter(ruta_video_salida, fourcc, 20, (video_data['width'], video_data['height']))
+
+
+dados = []
 
 for n in range(1, len(video_data['frames'])):
     framer = video_data['frames'][n-1][:, :, 2]
@@ -119,14 +194,24 @@ for n in range(1, len(video_data['frames'])):
 
     rojo_sin_borde = eliminar_objetos_borde(rojo_apertura)
 
-    contornos, _ = cv2.findContours(rojo_sin_borde, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contornos = seleccion_contornos(rojo_sin_borde)
 
-    contornos_filtrados = [contorno for contorno in contornos if 3000 < cv2.contourArea(contorno) < 7000]
+    dados = cambio_dado(dados, azul)
 
-    imagen_contornos_filtrados = frame.copy()
-    cv2.drawContours(imagen_contornos_filtrados, contornos_filtrados, -1, (0, 0, 0), 5)
+    for contorno in contornos:
+        nuevo = True
 
-    video_salida.write(imagen_contornos_filtrados)
+        for cont, _ in dados:
+            if contorno_similar(cont, contorno):
+                nuevo = False
+
+        if nuevo:
+            valor = contar_puntos(contorno, azul)
+            dados.append(valor)
+    
+    imagen_final = dibujar(dados, frame, (0,0,0))
+
+    video_salida.write(imagen_final)
 
 
 
