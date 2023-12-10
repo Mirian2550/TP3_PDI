@@ -1,26 +1,6 @@
 import cv2
 import numpy as np
 
-
-def _filtro_sobel(imagen_entrada: np.ndarray, tamano_kernel: int = 3) -> np.ndarray:
-    """
-    Aplica el filtro Sobel en las direcciones x e y a la imagen dada.
-
-    Parameters:
-    - imagen_entrada (np.ndarray): La imagen a la cual se aplicará el filtro Sobel.
-    - tamano_kernel (int, optional): Tamaño del kernel para el filtro Sobel. Por defecto es 3.
-
-    Returns:
-    - np.ndarray: La imagen resultante después de aplicar el filtro Sobel.
-    """
-    sobel_x = cv2.Sobel(imagen_entrada, cv2.CV_64F, 1, 0, ksize=tamano_kernel)
-    sobel_y = cv2.Sobel(imagen_entrada, cv2.CV_64F, 0, 1, ksize=tamano_kernel)
-
-    imagen_gradiente = cv2.convertScaleAbs(np.sqrt(sobel_x**2 + sobel_y**2))
-
-    return imagen_gradiente
-
-
 class VideoProcessor:
     def __init__(self, video):
         self.video = video
@@ -31,44 +11,47 @@ class VideoProcessor:
             print("Error al abrir el video.")
             return None
 
-        processed_frames = []
+        previous_frame = None
+        stopping_threshold = 1  # Ajusta este valor según sea necesario
 
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
 
-            # Aplicar un filtro: Convertir a escala de grises
-            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            imagen_suavizada = cv2.GaussianBlur(gray_frame, (15, 15), 0)
+            # Eliminar canal verde
+            frame_sin_verde = frame.copy()
+            frame_sin_verde[:, :, 1] = 0
 
-            imagen_gradiente = _filtro_sobel(imagen_suavizada)
+            # Segmentar dados utilizando canal rojo
+            canal_rojo = frame[:, :, 2]
+            _, dados_segmentados = cv2.threshold(canal_rojo, 200, 255, cv2.THRESH_BINARY)
 
-            imagen_filtrada_umbral = cv2.GaussianBlur(imagen_gradiente, (19, 19), 0)
+            # Contar puntos utilizando canal azul
+            canal_azul = frame[:, :, 0]
+            _, puntos_contados = cv2.threshold(canal_azul, 200, 255, cv2.THRESH_BINARY)
 
-            imagen_gradiente_abs = cv2.convertScaleAbs(imagen_filtrada_umbral)
+            # Mostrar las imágenes procesadas
+            cv2.imshow("Frame sin verde", frame_sin_verde)
+            cv2.imshow("Dados Segmentados", dados_segmentados)
+            cv2.imshow("Puntos Contados", puntos_contados)
 
-            umbral_superior = int(np.percentile(imagen_gradiente_abs, 90))
+            if previous_frame is not None:
+                # Calcular la diferencia entre el fotograma actual y el anterior
+                diff = cv2.absdiff(frame, previous_frame)
+                diff_sum = np.sum(diff)
+                print(diff_sum)
+                # Si la diferencia es menor que el umbral, mostrar el fotograma y detener el bucle
+                if diff_sum < stopping_threshold:
+                    print("Dado detenido. Mostrando el fotograma.")
+                    cv2.imshow("Fotograma Detenido", frame)
+                    cv2.waitKey(0)  # Esperar hasta que se presione una tecla
+                    break
 
-            _, imagen_umbralizada = cv2.threshold(imagen_gradiente_abs, umbral_superior, 1, cv2.THRESH_BINARY)
+            previous_frame = frame.copy()
 
-            imagen_expandida = cv2.morphologyEx(imagen_umbralizada, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8))
-
-            contornos, _ = cv2.findContours(imagen_expandida, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-            for i, contorno in enumerate(contornos):
-                area_contorno = cv2.contourArea(contorno)
-                if area_contorno >= 1000:
-                    cv2.drawContours(imagen_umbralizada, [contorno], -1, 255, thickness=cv2.FILLED)
-
-            # Agregar el fotograma procesado a la lista
-            processed_frames.append(imagen_umbralizada)
-
-            cv2.imshow(self.video, imagen_umbralizada)
             if cv2.waitKey(25) & 0xFF == ord('q'):
                 break
 
         cap.release()
         cv2.destroyAllWindows()
-
-        return processed_frames

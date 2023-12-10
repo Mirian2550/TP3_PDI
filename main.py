@@ -10,7 +10,7 @@ from video_process.video import VideoProcessor
 def _process_video(video):
     video_processor = VideoProcessor(video)
     processed_frames = video_processor.process_video()
-
+    """
     dice_detector = DiceDetector()
     dice_positions = dice_detector.detect_dice(processed_frames)
 
@@ -23,9 +23,10 @@ def _process_video(video):
     video_generator = VideoGenerator()
     output_video = video_generator.generate_video(annotated_frames, video)
     # output_video.show()
-
+    """
 if __name__ == '__main__':
-    videos = ["data/tirada_1.mp4", "data/tirada_2.mp4", "data/tirada_3.mp4", "data/tirada_4.mp4"]
+    # 1 humbral esta bien 1071951
+    videos = ["data/tirada_2.mp4"]
 
     with multiprocessing.Pool() as pool:
         pool.map(_process_video, videos)
