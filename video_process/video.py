@@ -1,6 +1,34 @@
 import cv2
 import numpy as np
 
+def detectar_contornos(frame):
+    # Convertir a escala de grises
+    frame_gris = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # Aplicar umbralización
+    _, umbralizado = cv2.threshold(frame_gris, 200, 255, cv2.THRESH_BINARY)
+
+    # Encontrar contornos en la imagen umbralizada
+    contours, _ = cv2.findContours(umbralizado, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Filtrar contornos por área
+    contours_filtrados = [cnt for cnt in contours if 1 < cv2.contourArea(cnt) < 500000000]
+
+    # Dibujar contornos en la imagen original
+    frame_contornos = frame.copy()
+    cv2.drawContours(frame_contornos, contours_filtrados, -1, (255, 0, 0), 2)
+
+    # Aplicar operación de apertura
+    kernel_apertura = np.ones((5, 5), np.uint8)
+    frame_contornos = cv2.morphologyEx(frame_contornos, cv2.MORPH_OPEN, kernel_apertura)
+
+    # Aplicar operación de cierre
+    kernel_cierre = np.ones((10, 10), np.uint8)
+    frame_contornos = cv2.morphologyEx(frame_contornos, cv2.MORPH_CLOSE, kernel_cierre)
+
+    return frame_contornos
+
+
 class VideoProcessor:
     def __init__(self, video):
         self.video = video
@@ -44,22 +72,22 @@ class VideoProcessor:
 
                 # Aplicar umbralización a la diferencia
                 _, diff_thresholded = cv2.threshold(diff_gray, 30, 255, cv2.THRESH_BINARY)
-
-                # Calcular la suma de los píxeles umbralizados
                 diff_sum = np.sum(diff_thresholded)
-                print(diff_sum)
-
-                # Si la suma es menor que el umbral, mostrar el fotograma y detener el bucle
-                # video 4 suma 510
-                # video 3
-                # video 1 suma 255
-                # video 2 suma 510
                 if diff_sum <= 600 and diff_sum > 100:  # Puedes ajustar este valor según sea necesario
                     print("Dado detenido. Mostrando el fotograma.")
+                    """
                     cv2.imshow("Fotograma Detenido", frame)
                     print('suma', diff_sum)
                     cv2.waitKey(0)  # Esperar hasta que se presione una tecla
                     #break
+                    """
+
+                    frame_con_contornos = detectar_contornos(frame)
+
+                    # Mostrar el frame con contornos
+                    cv2.imshow("Contornos de Dados", frame_con_contornos)
+
+                    cv2.waitKey(0)
 
             previous_frame = frame.copy()
 
